@@ -1,0 +1,20 @@
+[Unit]
+Description=Vane – AI answering engine (Next.js, nativ)
+After=network-online.target searxng.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vane
+Group=vane
+WorkingDirectory=/opt/vane
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=0.0.0.0
+Environment=SEARXNG_API_URL=http://127.0.0.1:8080
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
