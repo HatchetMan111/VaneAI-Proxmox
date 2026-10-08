@@ -311,12 +311,22 @@ pct exec "$CT_ID" -- bash -c '
     npm install -g yarn
   fi
   yarn --version
+  echo "--- Phase V3a: alte Build-Artefakte als root entfernen ---"
+  rm -rf /opt/vane/node_modules /home/vane/.npm /home/vane/.cache 2>/tmp/vane-rm-err.log || {
+    cat /tmp/vane-rm-err.log
+    ls -la "/opt/vane/node_modules/@types/react-syntax-highlighter/node_modules/" 2>/dev/null || true
+    df -i / | tail -1
+    echo "rm als root scheiterte – Container-Dateisystem pruefen."
+    exit 1
+  }
+  mkdir -p /opt/vane/node_modules /home/vane/.cache
+  chown -R vane:vane /opt/vane /home/vane
   if [ -f /opt/vane/yarn.lock ]; then
-    su -s /bin/bash vane -c "cd /opt/vane && rm -rf node_modules /home/vane/.npm /home/vane/.cache/yarn && yarn install --frozen-lockfile --network-timeout 600000 && yarn build && yarn cache clean"
+    su -s /bin/bash vane -c "cd /opt/vane && yarn install --frozen-lockfile --network-timeout 600000 && yarn build && yarn cache clean"
   elif [ -f /opt/vane/package-lock.json ]; then
-    su -s /bin/bash vane -c "cd /opt/vane && rm -rf node_modules && npm ci --no-audit --no-fund && npm run build && npm cache clean --force"
+    su -s /bin/bash vane -c "cd /opt/vane && npm ci --no-audit --no-fund && npm run build && npm cache clean --force"
   else
-    su -s /bin/bash vane -c "cd /opt/vane && rm -rf node_modules && npm install --no-audit --no-fund --legacy-peer-deps && npm run build && npm cache clean --force"
+    su -s /bin/bash vane -c "cd /opt/vane && npm install --no-audit --no-fund --legacy-peer-deps && npm run build && npm cache clean --force"
   fi
   echo "--- Phasen V1-V3 ok ---"
   df -h / | tail -1
