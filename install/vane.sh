@@ -243,8 +243,9 @@ pct exec "$CT_ID" -- bash -c '
   if ! /opt/searxng-venv/bin/python -c "import searx.webapp" >/dev/null 2>&1; then
     rm -rf /opt/searxng-venv
     python3 -m venv /opt/searxng-venv
-    /opt/searxng-venv/bin/pip install --upgrade pip wheel
-    /opt/searxng-venv/bin/pip install /opt/searxng-src gunicorn
+    /opt/searxng-venv/bin/pip install --upgrade pip setuptools wheel
+    /opt/searxng-venv/bin/pip install -r /opt/searxng-src/requirements.txt
+    /opt/searxng-venv/bin/pip install --no-build-isolation --no-deps /opt/searxng-src gunicorn
   fi
   /opt/searxng-venv/bin/python -c "import searx.webapp; print(\"searx-modul ok\")"
   # settings.yml nur schreiben, wenn nicht vorhanden (Secret bleibt erhalten)
