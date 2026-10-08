@@ -239,16 +239,9 @@ pct exec "$CT_ID" -- bash -c '
     git -C /opt/searxng-src pull --ff-only
   fi
   test -f /opt/searxng-src/searx/webapp.py
-  echo "--- Phase S3: venv + SearXNG-Install ---"
-  if ! /opt/searxng-venv/bin/python -c "import searx.webapp" >/dev/null 2>&1; then
-    rm -rf /opt/searxng-venv
-    python3 -m venv /opt/searxng-venv
-    /opt/searxng-venv/bin/pip install --upgrade pip setuptools wheel
-    /opt/searxng-venv/bin/pip install -r /opt/searxng-src/requirements.txt
-    /opt/searxng-venv/bin/pip install --no-build-isolation --no-deps /opt/searxng-src gunicorn
-  fi
-  /opt/searxng-venv/bin/python -c "import searx.webapp; print(\"searx-modul ok\")"
-  # settings.yml nur schreiben, wenn nicht vorhanden (Secret bleibt erhalten)
+  echo "--- Phase S2b: settings.yml (Secret nur beim ersten Lauf) ---"
+  # settings.yml MUSS vor dem Import-Check existieren: searx.webapp
+  # verweigert mit sys.exit(1) jedes Default-Secret (ultrasecretkey).
   if [ ! -f /etc/searxng/settings.yml ]; then
     mkdir -p /etc/searxng
     SECRET_KEY=$(openssl rand -hex 24)
@@ -267,9 +260,19 @@ engines:
     disabled: false
 YAML
   fi
-  chown -R searx:searx /opt/searxng-venv
   chmod 640 /etc/searxng/settings.yml
   chown -R searx:searx /etc/searxng
+  echo "--- Phase S3: venv + SearXNG-Install ---"
+  export SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml
+  if ! /opt/searxng-venv/bin/python -c "import searx.webapp" >/dev/null 2>&1; then
+    rm -rf /opt/searxng-venv
+    python3 -m venv /opt/searxng-venv
+    /opt/searxng-venv/bin/pip install --upgrade pip setuptools wheel
+    /opt/searxng-venv/bin/pip install -r /opt/searxng-src/requirements.txt
+    /opt/searxng-venv/bin/pip install --no-build-isolation --no-deps /opt/searxng-src gunicorn
+  fi
+  /opt/searxng-venv/bin/python -c "import searx.webapp; print(\"searx-modul ok\")"
+  chown -R searx:searx /opt/searxng-venv
 '
 pct exec "$CT_ID" -- test -f /etc/searxng/settings.yml \
   || { msg_error "SearxNG-Config fehlt: /etc/searxng/settings.yml."; exit 1; }
