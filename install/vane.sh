@@ -303,12 +303,18 @@ pct exec "$CT_ID" -- bash -c '
     su -s /bin/bash vane -c "git -C /opt/vane pull --ff-only"
   fi
   test -f /opt/vane/package.json
-  echo "--- Phase V3: Build ---"
+  echo "--- Phase V3: Build (yarn, wie Upstream-Dockerfile) ---"
   export NODE_OPTIONS=--max-old-space-size=1536
-  if [ -f /opt/vane/package-lock.json ]; then
+  if ! command -v yarn >/dev/null 2>&1; then
+    npm install -g yarn
+  fi
+  yarn --version
+  if [ -f /opt/vane/yarn.lock ]; then
+    su -s /bin/bash vane -c "cd /opt/vane && yarn install --frozen-lockfile --network-timeout 600000 && yarn build"
+  elif [ -f /opt/vane/package-lock.json ]; then
     su -s /bin/bash vane -c "cd /opt/vane && npm ci --no-audit --no-fund && npm run build"
   else
-    su -s /bin/bash vane -c "cd /opt/vane && npm install --no-audit --no-fund && npm run build"
+    su -s /bin/bash vane -c "cd /opt/vane && npm install --no-audit --no-fund --legacy-peer-deps && npm run build"
   fi
   echo "--- Phasen V1-V3 ok ---"
 '
