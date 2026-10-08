@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Vane Proxmox LXC Installer – im Stil der Proxmox VE Community Scripts
+# Vane Proxmox LXC Installer v1.1 – im Stil der Proxmox VE Community Scripts
 #
 # App:      Vane – privacy-fokussierte AI-Antwortmaschine (Next.js + SearxNG)
 # Upstream: https://github.com/ItzCrazyKns/Vane
@@ -207,23 +207,46 @@ done
 [[ -n "${CT_IP:-}" ]] || { msg_error "Keine Container-IP (pct exec hostname -I). Netzwerk/Bridge prüfen."; exit 1; }
 msg_ok "Container-IP: $CT_IP"
 
+msg_info "Preflight im Container (Platte/RAM) ..."
+pct exec "$CT_ID" -- bash -c '
+  set -euo pipefail
+  export LC_ALL=C LANG=C
+  df -h / | tail -1
+  free -m | head -2
+  FREE_KB=$(df --output=avail / | tail -1)
+  [ "$FREE_KB" -gt 4194304 ] || { echo "Zu wenig Plattenplatz (<4GB frei). Abbruch."; exit 1; }
+'
+
 # ---------------------------------------------------------------------------
 # 4. SearxNG + Vane im Container (via pct exec, idempotent)
 # ---------------------------------------------------------------------------
-msg_info "Installiere SearxNG im Container (pip + gunicorn, 127.0.0.1:${SEARXNG_PORT}) ..."
+msg_info "Installiere SearxNG im Container (echtes SearXNG von GitHub + gunicorn, 127.0.0.1:${SEARXNG_PORT}) ..."
 # ACHTUNG: In diesem Block sind KEINE einfachen Anführungszeichen erlaubt –
 # sie würden den äußeren bash -c Block der Host-Shell sprengen.
 pct exec "$CT_ID" -- bash -c '
   set -euo pipefail
   export DEBIAN_FRONTEND=noninteractive
+  export LC_ALL=C LANG=C
+  echo "--- Phase S1: Systempakete ---"
   apt-get update
-  apt-get install -y git curl ca-certificates build-essential python3 python3-venv python3-pip openssl
+  apt-get install -y git curl ca-certificates build-essential python3 python3-venv python3-pip openssl libxml2-dev libxslt1-dev zlib1g-dev
   id searx >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin -d /opt/searxng searx
-  if [ ! -x /opt/searxng-venv/bin/python ]; then
-    python3 -m venv /opt/searxng-venv
+  echo "--- Phase S2: SearXNG-Quellcode (github.com/searxng/searxng) ---"
+  if [ ! -d /opt/searxng-src/.git ]; then
+    rm -rf /opt/searxng-src
+    git clone --depth 1 https://github.com/searxng/searxng /opt/searxng-src
+  else
+    git -C /opt/searxng-src pull --ff-only
   fi
-  /opt/searxng-venv/bin/pip install --upgrade pip wheel
-  /opt/searxng-venv/bin/pip install searxng gunicorn
+  test -f /opt/searxng-src/searx/webapp.py
+  echo "--- Phase S3: venv + SearXNG-Install ---"
+  if ! /opt/searxng-venv/bin/python -c "import searx.webapp" >/dev/null 2>&1; then
+    rm -rf /opt/searxng-venv
+    python3 -m venv /opt/searxng-venv
+    /opt/searxng-venv/bin/pip install --upgrade pip wheel
+    /opt/searxng-venv/bin/pip install /opt/searxng-src gunicorn
+  fi
+  /opt/searxng-venv/bin/python -c "import searx.webapp; print(\"searx-modul ok\")"
   # settings.yml nur schreiben, wenn nicht vorhanden (Secret bleibt erhalten)
   if [ ! -f /etc/searxng/settings.yml ]; then
     mkdir -p /etc/searxng
@@ -255,12 +278,17 @@ msg_info "Installiere Node 20 + Vane im Container (nativ, ohne Docker) ..."
 pct exec "$CT_ID" -- bash -c '
   set -euo pipefail
   export DEBIAN_FRONTEND=noninteractive
+  export LC_ALL=C LANG=C
+  echo "--- Phase V1: Node 20 ---"
   if ! command -v node >/dev/null 2>&1; then
     curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/nodesource_setup.sh
     bash /tmp/nodesource_setup.sh
     rm -f /tmp/nodesource_setup.sh
     apt-get install -y nodejs
   fi
+  node --version
+  npm --version
+  echo "--- Phase V2: Vane-Checkout ---"
   id vane >/dev/null 2>&1 || useradd -m -s /bin/bash vane
   if [ ! -d /opt/vane/.git ]; then
     rm -rf /opt/vane
@@ -271,7 +299,10 @@ pct exec "$CT_ID" -- bash -c '
     su -s /bin/bash vane -c "git -C /opt/vane pull --ff-only"
   fi
   test -f /opt/vane/package.json
-  su -s /bin/bash vane -c "cd /opt/vane && npm ci && npm run build"
+  echo "--- Phase V3: Build ---"
+  export NODE_OPTIONS=--max-old-space-size=1536
+  su -s /bin/bash vane -c "cd /opt/vane && npm ci --no-audit --no-fund && npm run build"
+  echo "--- Phasen V1-V3 ok ---"
 '
 # Host-seitiger Guard: bricht laut ab, falls der Checkout/Build fehlt.
 pct exec "$CT_ID" -- test -f /opt/vane/package.json \
@@ -297,7 +328,7 @@ User=searx
 Group=searx
 Environment=SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/searxng-venv/bin/gunicorn --bind 127.0.0.1:${SEARXNG_PORT} --workers 2 --threads 4 --timeout 120 searx.webapp:app
+ExecStart=/opt/searxng-venv/bin/gunicorn --bind 127.0.0.1:${SEARXNG_PORT} -k gthread --workers 2 --threads 4 --timeout 120 searx.webapp:app
 Restart=always
 RestartSec=5
 

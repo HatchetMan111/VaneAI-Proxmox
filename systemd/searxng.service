@@ -9,7 +9,7 @@ User=searx
 Group=searx
 Environment=SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/searxng-venv/bin/gunicorn --bind 127.0.0.1:8080 --workers 2 --threads 4 --timeout 120 searx.webapp:app
+ExecStart=/opt/searxng-venv/bin/gunicorn --bind 127.0.0.1:8080 -k gthread --workers 2 --threads 4 --timeout 120 searx.webapp:app
 Restart=always
 RestartSec=5
 
