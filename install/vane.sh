@@ -305,7 +305,11 @@ pct exec "$CT_ID" -- bash -c '
   test -f /opt/vane/package.json
   echo "--- Phase V3: Build ---"
   export NODE_OPTIONS=--max-old-space-size=1536
-  su -s /bin/bash vane -c "cd /opt/vane && npm ci --no-audit --no-fund && npm run build"
+  if [ -f /opt/vane/package-lock.json ]; then
+    su -s /bin/bash vane -c "cd /opt/vane && npm ci --no-audit --no-fund && npm run build"
+  else
+    su -s /bin/bash vane -c "cd /opt/vane && npm install --no-audit --no-fund && npm run build"
+  fi
   echo "--- Phasen V1-V3 ok ---"
 '
 # Host-seitiger Guard: bricht laut ab, falls der Checkout/Build fehlt.
