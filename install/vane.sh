@@ -31,7 +31,7 @@ SEARXNG_UNIT_URL="https://raw.githubusercontent.com/HatchetMan111/VaneAI-Proxmox
 DEFAULT_CORES="2"                               # vCPU (npm run build braucht kurz mehr)
 DEFAULT_RAM="2048"                              # RAM in MB (Next.js Build ~1.5 GB Spitze)
 DEFAULT_SWAP="1024"                             # Swap (MB) – puffert den Build
-DEFAULT_DISK="8"                                # Disk in GB (Image ~2-3 GB + node_modules)
+DEFAULT_DISK="12"                               # Disk in GB (node_modules ~2GB + yarn-Cache + searx + System)
 DEFAULT_BRIDGE="vmbr0"
 DEFAULT_TEMPLATE_STORE="local"                  # Storage für CT-Templates
 DEFAULT_OS="debian-12-standard"                 # Template-Familie
@@ -230,6 +230,8 @@ pct exec "$CT_ID" -- bash -c '
   echo "--- Phase S1: Systempakete ---"
   apt-get update
   apt-get install -y git curl ca-certificates build-essential python3 python3-venv python3-pip openssl libxml2-dev libxslt1-dev zlib1g-dev
+  apt-get clean
+  rm -rf /var/cache/apt/archives/*.deb 2>/dev/null || true
   id searx >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin -d /opt/searxng searx
   echo "--- Phase S2: SearXNG-Quellcode (github.com/searxng/searxng) ---"
   if [ ! -d /opt/searxng-src/.git ]; then
@@ -310,13 +312,14 @@ pct exec "$CT_ID" -- bash -c '
   fi
   yarn --version
   if [ -f /opt/vane/yarn.lock ]; then
-    su -s /bin/bash vane -c "cd /opt/vane && yarn install --frozen-lockfile --network-timeout 600000 && yarn build"
+    su -s /bin/bash vane -c "cd /opt/vane && rm -rf node_modules /home/vane/.npm /home/vane/.cache/yarn && yarn install --frozen-lockfile --network-timeout 600000 && yarn build && yarn cache clean"
   elif [ -f /opt/vane/package-lock.json ]; then
-    su -s /bin/bash vane -c "cd /opt/vane && npm ci --no-audit --no-fund && npm run build"
+    su -s /bin/bash vane -c "cd /opt/vane && rm -rf node_modules && npm ci --no-audit --no-fund && npm run build && npm cache clean --force"
   else
-    su -s /bin/bash vane -c "cd /opt/vane && npm install --no-audit --no-fund --legacy-peer-deps && npm run build"
+    su -s /bin/bash vane -c "cd /opt/vane && rm -rf node_modules && npm install --no-audit --no-fund --legacy-peer-deps && npm run build && npm cache clean --force"
   fi
   echo "--- Phasen V1-V3 ok ---"
+  df -h / | tail -1
 '
 # Host-seitiger Guard: bricht laut ab, falls der Checkout/Build fehlt.
 pct exec "$CT_ID" -- test -f /opt/vane/package.json \

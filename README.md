@@ -28,7 +28,7 @@ bash vane.sh --debug     # = bash -x, komplette Fehlermeldungskette + Log unter 
 | Tech-Stack | Node 20 + Next.js (`npm ci && npm run build && npm run start`, bind `0.0.0.0:3000`) + SearxNG (pip + gunicorn, nur `127.0.0.1:8080`) |
 | GitHub-Repo (Upstream) | `https://github.com/ItzCrazyKns/Vane` |
 | Web UI | `http://<LXC-IP>:3000` |
-| Standard-Ressourcen | 2 vCPU / 2048 MB RAM / 1024 MB Swap / 8 GB Disk (Build-Spitze ~1.5 GB RAM) |
+| Standard-Ressourcen | 2 vCPU / 2048 MB RAM / 1024 MB Swap / 12 GB Disk (node_modules ~2 GB + Build-Cache; ältere 8-GB-CTs ggf. per `pct resize <ID> +4G` erweitern) |
 | CT-ID | immer die **nächste freie ID** (`pvesh get /cluster/nextid`), außer `--ctid` gesetzt |
 | Template | `debian-12-standard` (neuestes auf Storage `local`) |
 | LXC-Features | **unprivilegiert** (`--unprivileged 1`), `nesting=1`, `onboot: 1` |
