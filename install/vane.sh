@@ -332,11 +332,11 @@ pct exec "$CT_ID" -- bash -c '
   }
   echo "Google-Fonts ok."
   if [ -f /opt/vane/yarn.lock ]; then
-    su -s /bin/bash vane -c "cd /opt/vane && yarn install --frozen-lockfile --network-timeout 600000 && yarn build && yarn cache clean"
+    su -s /bin/bash vane -c "cd /opt/vane && yarn install --frozen-lockfile --network-timeout 600000 && for i in 1 2 3; do echo \"Build-Versuch \$i/3\"; yarn build && break || { [ \$i -eq 3 ] && exit 1; echo \"Warte 15s vor Wiederholung\"; sleep 15; }; done && yarn cache clean"
   elif [ -f /opt/vane/package-lock.json ]; then
-    su -s /bin/bash vane -c "cd /opt/vane && npm ci --no-audit --no-fund && npm run build && npm cache clean --force"
+    su -s /bin/bash vane -c "cd /opt/vane && rm -rf node_modules && npm ci --no-audit --no-fund && for i in 1 2 3; do echo \"Build-Versuch \$i/3\"; npm run build && break || { [ \$i -eq 3 ] && exit 1; sleep 15; }; done && npm cache clean --force"
   else
-    su -s /bin/bash vane -c "cd /opt/vane && npm install --no-audit --no-fund --legacy-peer-deps && npm run build && npm cache clean --force"
+    su -s /bin/bash vane -c "cd /opt/vane && rm -rf node_modules && npm install --no-audit --no-fund --legacy-peer-deps && for i in 1 2 3; do echo \"Build-Versuch \$i/3\"; npm run build && break || { [ \$i -eq 3 ] && exit 1; sleep 15; }; done && npm cache clean --force"
   fi
   echo "--- Phasen V1-V3 ok ---"
   df -h / | tail -1
