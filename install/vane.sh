@@ -321,6 +321,16 @@ pct exec "$CT_ID" -- bash -c '
   }
   mkdir -p /opt/vane/node_modules /home/vane/.cache
   chown -R vane:vane /opt/vane /home/vane
+  echo "--- Phase V3b: Google-Fonts erreichbar? (next/font braucht das beim Build) ---"
+  curl -fsS -m 20 -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36" "https://fonts.googleapis.com/css2?family=Montserrat:wght@400&display=swap" | grep -q "font-style" || {
+    echo "FEHLER: fonts.googleapis.com liefert kein Font-CSS."
+    echo "next/font/google laedt Montserrat beim Build von Google – ohne das schlaegt der Build fehl"
+    echo "(TypeError Cannot read properties of null in next/font-Loader)."
+    echo "Pruefen: DNS/Adblock (Pi-hole/AdGuard) – fonts.googleapis.com + fonts.gstatic.com freigeben,"
+    echo "dann Script erneut laufen lassen. Test im CT: curl -sSI https://fonts.googleapis.com/css2?family=Montserrat"
+    exit 1
+  }
+  echo "Google-Fonts ok."
   if [ -f /opt/vane/yarn.lock ]; then
     su -s /bin/bash vane -c "cd /opt/vane && yarn install --frozen-lockfile --network-timeout 600000 && yarn build && yarn cache clean"
   elif [ -f /opt/vane/package-lock.json ]; then
