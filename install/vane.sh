@@ -280,6 +280,48 @@ pct exec "$CT_ID" -- test -f /etc/searxng/settings.yml \
   || { msg_error "SearxNG-Config fehlt: /etc/searxng/settings.yml."; exit 1; }
 msg_ok "SearxNG installiert (JSON-Format + Wolfram Alpha aktiviert)."
 
+# ---------------------------------------------------------------------------
+# 4a. SearxNG sofort als Service aktivieren (unabhaengig vom Vane-Build –
+#     damit steht die Suche auch, wenn V3 beim ersten Lauf hakt)
+# ---------------------------------------------------------------------------
+if pct exec "$CT_ID" -- curl -fsSL -o /etc/systemd/system/searxng.service "$SEARXNG_UNIT_URL" 2>/dev/null; then
+  msg_ok "searxng.service aus Repo übernommen."
+else
+  msg_warn "SearxNG-Unit-URL nicht erreichbar – schreibe Inline-Unit."
+  pct push "$CT_ID" /dev/stdin /etc/systemd/system/searxng.service <<UNIT
+[Unit]
+Description=SearxNG – lokale Metasuchmaschine (fuer Vane)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=searx
+Group=searx
+Environment=SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/searxng-venv/bin/gunicorn --bind 127.0.0.1:${SEARXNG_PORT} -k gthread --workers 2 --threads 4 --timeout 120 searx.webapp:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+fi
+pct exec "$CT_ID" -- systemctl daemon-reload
+pct exec "$CT_ID" -- systemctl enable --now searxng
+pct exec "$CT_ID" -- systemctl is-active searxng || { msg_error "systemd-Service searxng ist nicht active."; pct exec "$CT_ID" -- systemctl status searxng --no-pager || true; pct exec "$CT_ID" -- journalctl -u searxng --no-pager -n 100 || true; exit 1; }
+msg_ok "SearxNG-Service läuft (systemctl is-active searxng = active)."
+msg_info "Warte auf SearxNG (max. 2 Min) ..."
+SEARX_EARLY_OK=0
+for _ in $(seq 1 12); do
+  if pct exec "$CT_ID" -- curl -fs -m 10 "http://localhost:${SEARXNG_PORT}/" >/dev/null 2>&1; then SEARX_EARLY_OK=1; break; fi
+  sleep 10
+done
+[[ "$SEARX_EARLY_OK" == "1" ]] \
+  || { msg_error "SearxNG antwortet nicht auf localhost:${SEARXNG_PORT}/."; pct exec "$CT_ID" -- journalctl -u searxng --no-pager -n 100 || true; exit 1; }
+msg_ok "SearxNG antwortet bereits jetzt (HTTP 200 auf localhost:${SEARXNG_PORT}/) – weiter mit Vane."
+
 msg_info "Installiere Node 20 + Vane im Container (nativ, ohne Docker) ..."
 pct exec "$CT_ID" -- bash -c '
   set -euo pipefail
@@ -348,32 +390,8 @@ pct exec "$CT_ID" -- test -d /opt/vane/.next \
   || { msg_error "Build unvollstaendig: /opt/vane/.next fehlt (npm run build)."; exit 1; }
 msg_ok "Vane gebaut (Node $(pct exec "$CT_ID" -- node --version 2>/dev/null || echo "?"))."
 
-# systemd-Units aus diesem Repo übernehmen (fällt auf Inline-Unit zurück)
-if pct exec "$CT_ID" -- curl -fsSL -o /etc/systemd/system/searxng.service "$SEARXNG_UNIT_URL" 2>/dev/null; then
-  msg_ok "searxng.service aus Repo übernommen."
-else
-  msg_warn "SearxNG-Unit-URL nicht erreichbar – schreibe Inline-Unit."
-  pct push "$CT_ID" /dev/stdin /etc/systemd/system/searxng.service <<UNIT
-[Unit]
-Description=SearxNG – lokale Metasuchmaschine (fuer Vane)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=searx
-Group=searx
-Environment=SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml
-Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/searxng-venv/bin/gunicorn --bind 127.0.0.1:${SEARXNG_PORT} -k gthread --workers 2 --threads 4 --timeout 120 searx.webapp:app
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-fi
-
+# Vane-Unit aus diesem Repo übernehmen (fällt auf Inline-Unit zurück).
+# Hinweis: searxng.service wurde bereits in Schritt 4a geschrieben + gestartet.
 if pct exec "$CT_ID" -- curl -fsSL -o /etc/systemd/system/vane.service "$VANE_UNIT_URL" 2>/dev/null; then
   msg_ok "vane.service aus Repo übernommen."
 else
@@ -408,8 +426,8 @@ pct exec "$CT_ID" -- bash -c '
   mkdir -p /opt/vane/data
   chown -R vane:vane /opt/vane/data
   systemctl daemon-reload
-  systemctl enable --now searxng
   systemctl enable --now vane
+  systemctl is-active searxng >/dev/null || systemctl restart searxng
 '
 
 # ---------------------------------------------------------------------------

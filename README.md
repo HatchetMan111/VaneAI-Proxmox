@@ -39,8 +39,11 @@ Das Skript (`set -euo pipefail`, idempotent, `trap ERR` mit Befehl+Zeile+Exit-Co
 2. erstellt den LXC `vane` (`onboot: 1`, unprivilegiert),
 3. installiert im Container: Node 20 (NodeSource), SearxNG (venv + gunicorn,
    `/etc/searxng/settings.yml` mit **JSON-Format + Wolfram Alpha**, Secret nur beim
-   ersten Lauf generiert), klont/pullt Vane nach `/opt/vane`, `npm ci && npm run build`,
+   ersten Lauf generiert),    klont/pullt Vane nach `/opt/vane`, `npm ci && npm run build`,
    schreibt `vane.service` + `searxng.service`, `systemctl enable --now` beide,
+   wobei **SearXNG bereits direkt nach seiner Installation startet und per HTTP
+   verifiziert wird** — unabhängig davon, ob der (lange) Vane-Build danach
+   beim ersten Versuch hakt,
 4. verifiziert `systemctl is-active vane searxng` + HTTP auf `localhost:3000`
    und `localhost:8080` und gibt die finale URL + Container-IP aus.
 
